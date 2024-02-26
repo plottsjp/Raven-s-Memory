@@ -6,10 +6,15 @@ import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -22,12 +27,70 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import com.plotts.jonathan.turbonotes.ui.theme.AppTheme
+import java.util.UUID
 
 
-data class RuneData(@DrawableRes val id: Int, val description: String)
+data class RuneData(
+    @DrawableRes val id: Int,
+    val description: String,
+    var uuid: UUID = UUID.randomUUID()
+) {
+
+
+    var matched = false
+    var flipped = false
+    @DrawableRes
+    val background = R.drawable.card_background
+
+//    @ColorRes
+//    fun getBackgroundResource(): Int {
+//
+//    }
+
+    fun getForegroundResource(): Int =
+        when {
+            matched -> R.drawable.check
+            flipped -> R.drawable.card_background
+            else -> id
+        }
+
+
+    companion object {
+        fun duplicateWithNewUUID(runeData: RuneData) =
+            RuneData(
+                runeData.id,
+                runeData.description,
+                UUID.randomUUID()
+            )
+    }
+}
+
 class RavensViewModel : ViewModel() {
+    fun tapOnRune(uuid: UUID) {
+        val tappedRune = runesContent.find { it.uuid == uuid } ?: return
+        tappedRune.flipped = tappedRune.flipped.not()
 
-    var runesMasterList = mutableListOf(
+        val flippedCards = runesContent.filter { it.flipped }
+        when {
+            flippedCards.size < 2 -> return
+            flippedCards.size == 2 -> {
+                if (flippedCards[0].id == flippedCards[1].id) {
+                    flippedCards[0].matched = true
+                    flippedCards[1].matched = true
+                }
+                turnAllCardsFaceDown()
+            }
+
+            else -> turnAllCardsFaceDown()
+        }
+    }
+
+    private fun turnAllCardsFaceDown() {
+        runesContent.forEach { it.flipped = false }
+    }
+
+    private val runesMasterList = mutableListOf(
         RuneData(R.drawable.algiz, "algiz"),
         RuneData(R.drawable.ansuz, "ansuz"),
         RuneData(R.drawable.berkana, "berkana"),
@@ -54,12 +117,17 @@ class RavensViewModel : ViewModel() {
     )
 
     val runesContent = mutableListOf<RuneData>()
+
     init {
         runesMasterList.shuffle()
         //add 8 runes to the game
-        runesContent.addAll(runesMasterList.subList(0,8))
+        runesContent.addAll(runesMasterList.subList(0, 8))
         //add their match
-        runesContent.addAll(runesContent)
+        val tempList = mutableListOf<RuneData>()
+        runesContent.forEach {
+            tempList.add(RuneData.duplicateWithNewUUID(it))
+        }
+        runesContent.addAll(tempList)
         runesContent.shuffle()
     }
 
@@ -71,7 +139,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ComposeEverything()
+            AppTheme {
+                ComposeEverything()
+            }
         }
     }
 
@@ -83,14 +153,24 @@ class MainActivity : AppCompatActivity() {
 
     @Composable
     fun ComposeRunes(runes: List<RuneData>) {
-        LazyVerticalGrid(
-            columns = GridCells.FixedSize(60.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(16.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth()
         ) {
-            items(runes) { rune ->
-                DrawRuneCard(runeData = rune)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(runes) { rune ->
+                    Box(Modifier.padding(8.dp)) {
+                        DrawRuneCard(runeData = rune)
+
+                    }
+                }
             }
         }
     }
@@ -102,17 +182,22 @@ class MainActivity : AppCompatActivity() {
             elevation = CardDefaults.cardElevation(
                 defaultElevation = 6.dp
             ),
+//            colors = CardDefaults.cardColors(
+//                containerColor = colorResource(id = runeData.getBackgroundResource)
+//            ),
             modifier = Modifier
-                .size(width = 60.dp, height = 120.dp)
+                .aspectRatio(.5f, false)
         ) {
-            Box {
-
+            Box(
+                modifier = Modifier.clickable { viewModel.tapOnRune(runeData.uuid) }
+            ) {
                 Image(
-                    painter = painterResource(id = runeData.id),
+                    painter = painterResource(id = runeData.getForegroundResource()),
                     contentDescription = runeData.description,
                     modifier = Modifier
                         .padding(8.dp)
-                        .align(Alignment.Center),
+                        .align(Alignment.Center)
+                        .fillMaxSize()
                 )
             }
         }
