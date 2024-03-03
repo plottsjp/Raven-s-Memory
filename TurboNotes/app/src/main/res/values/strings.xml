@@ -10,4 +10,7 @@
     <string name="menu_home">Home</string>
     <string name="menu_gallery">Gallery</string>
     <string name="menu_slideshow">Slideshow</string>
+    <string name="game_over_title">You Win!</string>
+    <string name="game_over_text">You finished in only %d turns.</string>
+    <string name="game_over_play_again">Play Again</string>
 </resources>

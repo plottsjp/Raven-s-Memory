@@ -10,6 +10,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,9 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -99,7 +105,8 @@ class RavensViewModel : ViewModel() {
         //flip a card up
         viewModelScope.launch {
             val newList = mutableData.map { it.immutableUpdate() }
-            _gameState = MemoryGameState(newList, memoryState.score)
+            _gameState = MemoryGameState(newList,
+                memoryState.score,memoryState.isGameOver)
             _uiState.emit(_gameState)
         }
         when {
@@ -121,12 +128,18 @@ class RavensViewModel : ViewModel() {
         if (shouldFlipCardsBackDown) {
             viewModelScope.launch {
                 val newList = mutableData.map { it.immutableUpdate() }
-                _gameState = MemoryGameState(newList, memoryState.score+1)
+                var keepPlaying = false
+                newList.forEach { if(it.matched.not()){keepPlaying = true} }
+                _gameState = MemoryGameState(newList, memoryState.score+1,keepPlaying.not())
 
                 delay(1000)
                 _uiState.emit(_gameState)
             }
         }
+    }
+
+    fun restartGame() {
+        startGame()
     }
 
     private val runesMasterList = mutableListOf(
@@ -156,14 +169,15 @@ class RavensViewModel : ViewModel() {
     )
 
     //for tracking game state
-    private var _gameState = MemoryGameState(emptyList(),0)
+    private var _gameState = MemoryGameState(emptyList(),0,false)
 
     //for tracking display state
     private val _uiState = MutableStateFlow(_gameState)
     // The UI collects from this StateFlow to get its state updates
     @OptIn(FlowPreview::class)
     val uiState: Flow<MemoryGameState> = _uiState
-    init {
+
+    private fun startGame(){
         val runesContent = mutableListOf<RuneData>()
         runesMasterList.shuffle()
         //add 8 runes to the game
@@ -176,18 +190,23 @@ class RavensViewModel : ViewModel() {
         runesContent.addAll(tempList)
         runesContent.shuffle()
         viewModelScope.launch {
-            _gameState = MemoryGameState(runesContent,0)
+            _gameState = MemoryGameState(runesContent,0,false)
             _uiState.emit(_gameState)
         }
+    }
+    init {
+       startGame()
     }
 
 }
 
 data class MemoryGameState(
     val runeList: List<RuneData>,
-    val score: Int
+    val score: Int,
+    val isGameOver:Boolean,
 ){
-    fun duplicate():MemoryGameState = MemoryGameState(runeList.map { it.immutableUpdate() },score)
+
+    fun duplicate():MemoryGameState = MemoryGameState(runeList.map { it.immutableUpdate() },score,isGameOver)
 
 }
 
@@ -198,16 +217,73 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             AppTheme {
+
                 ComposeEverything()
             }
         }
     }
     @Composable
+    fun ComposeYouWin(score: Int) {
+        Dialog(
+            onDismissRequest = { viewModel.restartGame() },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false)
+        ) {
+            ElevatedCard(
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 6.dp),
+                ) {
+                    Column {
+                        Text(
+                            text = getString(R.string.game_over_title),
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = getString(R.string.game_over_text, score),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
+                        ){
+                            Button(
+                                onClick = { viewModel.restartGame() },
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = getString(R.string.game_over_play_again),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+
+                            }
+                        }
+                    }
+                }
+        }
+
+    }
+    @Composable
     fun ComposeEverything(){
         val uiState: MemoryGameState by viewModel.uiState.collectAsStateWithLifecycle(
-            MemoryGameState(emptyList(),0)
+            MemoryGameState(emptyList(),0,false)
         )
-        ComposeRunes(runes = uiState.runeList,uiState.score)
+        AnimatedContent(
+                targetState = uiState.isGameOver,
+        label = "") {gameOver ->
+            when{
+                gameOver -> {
+                    ComposeRunes(runes = uiState.runeList,uiState.score)
+                    ComposeYouWin(uiState.score)
+                }
+                else ->  ComposeRunes(runes = uiState.runeList,uiState.score)
+            }
+        }
+
+
     }
 
 
@@ -257,9 +333,6 @@ class MainActivity : AppCompatActivity() {
             elevation = CardDefaults.cardElevation(
                 defaultElevation = 6.dp
             ),
-//            colors = CardDefaults.cardColors(
-//                containerColor = colorResource(id = runeData.getBackgroundResource)
-//            ),
             modifier = Modifier
                 .aspectRatio(.5f, false)
         ) {
