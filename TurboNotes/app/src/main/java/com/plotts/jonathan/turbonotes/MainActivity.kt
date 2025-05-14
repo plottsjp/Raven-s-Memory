@@ -292,8 +292,10 @@ class MainActivity : AppCompatActivity() {
     fun ComposeRunes(runes: List<RuneData>,score:Int) {
         Scaffold(
             topBar = {
-                TopAppBar(title = { Text(text = "Raven's Memory") },
-                    actions = {Text(text = "Score: $score")}
+                TopAppBar(
+                    title = { Text(text = "Raven's Memory") },
+                    actions = {Text(text = "Score: $score")},
+                   
                 )
             },
             modifier = Modifier
